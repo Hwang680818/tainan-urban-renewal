@@ -212,6 +212,95 @@ function getFallbackShops(): any[] {
   return base.map(s => ({ ...s, distanceMeters: calcDistanceToRailway(s.lng, s.lat) }));
 }
 
+
+// 前端本機版：不依賴 /api/agent-simulation，Vercel 靜態部署也可以直接產生模擬結果。
+function simulateLocalAgents(params: {
+  isRent: boolean;
+  bufferSize: number;
+  avgPrice: number;
+  shopCount: number;
+  policyScenario: string;
+}) {
+  const scenario = params.policyScenario || "";
+  const hasGreen = /綠|樹|遮蔭|公園|景觀|步行|人行/.test(scenario);
+  const hasParkingLoss = /減少停車|停車|車位|車道縮減/.test(scenario);
+  const hasCommerce = /商業|店家|餐飲|市集|活動/.test(scenario);
+  const hasBike = /自行車|單車|腳踏車|騎乘/.test(scenario);
+  const hasTraffic = /交通|轉乘|公車|捷運|車流|人車分流/.test(scenario);
+  const hasHousing = /房價|租金|居住|租屋|購屋/.test(scenario);
+
+  const clamp = (n: number) => Math.max(35, Math.min(96, Math.round(n)));
+  const pricePressure = params.isRent ? params.avgPrice > 900 : params.avgPrice > 45;
+  const strongAmenity = params.shopCount >= 80;
+
+  return [
+    {
+      name: "網路輿論場",
+      supportScore: clamp(66 + (hasGreen ? 10 : 0) + (hasTraffic ? 8 : 0) + (hasCommerce ? 4 : 0) - (hasParkingLoss ? 8 : 0) - (pricePressure ? 7 : 0)),
+      concerns: [
+        pricePressure ? "網路討論容易把更新計畫連結到房價或租金上漲，形成『漂亮但住不起』的質疑。" : "若資訊揭露不足，社群仍可能質疑願景圖與實際完工成果的落差。",
+        hasParkingLoss ? "停車與車流調整會成為短期負面聲量來源，需要清楚說明替代方案。" : "工程期程、交通改道與完工時間仍會被反覆追問。"
+      ],
+      suggestions: [
+        "公開分期時程、交通替代方案與房價監測資料，降低『只做形象工程』的質疑。",
+        "用地圖與數據呈現綠廊、站點、商業與居住影響，讓討論從情緒轉為可驗證資訊。"
+      ],
+      summary: hasGreen
+        ? "整體會期待台南變漂亮、變好走，但如果停車、工期與房價沒有說清楚，留言區很快會從支持轉成吐槽。"
+        : "網路聲量會保持觀望，除非交通改善與公共利益講清楚，否則容易被解讀成另一個願景圖專案。"
+    },
+    {
+      name: "青年在地居民",
+      supportScore: clamp(62 + (hasGreen ? 8 : 0) + (hasTraffic ? 9 : 0) + (strongAmenity ? 5 : 0) - (pricePressure ? 12 : 0) - (hasParkingLoss ? 4 : 0)),
+      concerns: [
+        pricePressure ? "最擔心公共建設改善後帶動房價與租金，讓在地青年更難長期定居。" : "仍會關注住宅可負擔性、托育、公園與通勤是否真的改善。",
+        "如果只增加景觀與商業活動，卻缺少日常生活配套，支持度會被削弱。"
+      ],
+      suggestions: [
+        "搭配房價租金監測、青年住宅或租屋資訊透明化，避免更新利益只流向投資端。",
+        "強化林森站、南台南站與周邊生活圈的步行、托育與通勤銜接。"
+      ],
+      summary: "會支持更好的綠廊與轉乘環境，但前提是不要變成推升房價的包裝。能不能住得起、通勤方便，才是核心。"
+    },
+    {
+      name: "青年短居學生",
+      supportScore: clamp(70 + (hasCommerce ? 8 : 0) + (hasBike ? 8 : 0) + (hasGreen ? 5 : 0) - (params.isRent && pricePressure ? 13 : 0) - (hasParkingLoss ? 3 : 0)),
+      concerns: [
+        params.isRent && pricePressure ? "學生與短租族會直接感受到租金壓力，對商業活化可能保持矛盾態度。" : "主要關心租屋安全、夜間照明、餐飲超商與自行車動線。",
+        "若施工期間影響騎車、走路或租屋出入，短期反彈會明顯。"
+      ],
+      suggestions: [
+        "建立清楚的夜間照明、自行車分流與學生租屋安全資訊。",
+        "把商業活動控制在不干擾住宅與租屋生活的尺度，並保留日常平價機能。"
+      ],
+      summary: "學生族群會喜歡好走、好騎、好吃的生活圈，但如果租金上漲或施工很卡，支持度會很快下降。"
+    },
+    {
+      name: "高齡在地居民",
+      supportScore: clamp(64 + (hasGreen ? 9 : 0) + (hasTraffic ? 6 : 0) - (hasCommerce ? 4 : 0) - (hasParkingLoss ? 6 : 0)),
+      concerns: [
+        "長者最在意夜間照明、路面平整、座椅遮蔭、無障礙與原有生活路徑是否被改變。",
+        hasCommerce ? "商業活動增加會帶來熱鬧，但也可能引發噪音、車流與居住安寧疑慮。" : "若設計偏向觀光或年輕族群，會擔心在地日常需求被忽略。"
+      ],
+      suggestions: [
+        "以無障礙、人車分流、座椅、遮蔭、廁所與照明作為基本配備，而不是後續加值項目。",
+        "施工前後都要有清楚公告與替代動線，並保留長者熟悉的採買、就醫路徑。"
+      ],
+      summary: "長輩不是反對綠廊，而是怕不好走、太暗、太吵或路徑被改掉。只要安全與維護到位，支持度會提高。"
+    }
+  ];
+}
+
+function buildLocalSpatialAnalysis(stats: any, effectiveDataMode: "price" | "rent", prompt: string, shopStats?: any) {
+  const unit = effectiveDataMode === "price" ? "萬/坪" : "元/坪/月";
+  const title = effectiveDataMode === "price" ? "房價空間分析" : "租金空間分析";
+  const core = stats.z250 || stats.z500 || stats.avgPrice;
+  const outer = stats.z1500 || stats.z1000 || stats.avgPrice;
+  const gradient = core && outer ? Math.round((core - outer) * 10) / 10 : 0;
+  const trend = gradient > 0 ? "核心廊帶行情高於外圍，具備站點與綠廊加成特徵" : gradient < 0 ? "外圍價格不低，可能受生活圈或個案條件影響" : "核心與外圍差異不明顯";
+  return `### ${title}\n\n目前篩選資料共 **${stats.count} 筆**，平均值約 **${stats.avgPrice} ${unit}**，中位數約 **${stats.medianPrice} ${unit}**。\n\n### 空間判讀\n\n- 0–250m 核心帶：約 **${stats.z250} ${unit}**，樣本 ${stats.c250} 筆。\n- 250–500m 近核心帶：約 **${stats.z500} ${unit}**，樣本 ${stats.c500} 筆。\n- 500–1000m 生活圈帶：約 **${stats.z1000} ${unit}**，樣本 ${stats.c1000} 筆。\n- 1000–1500m 擴散帶：約 **${stats.z1500} ${unit}**，樣本 ${stats.c1500} 筆。\n\n整體判讀：**${trend}**。\n\n### 對規劃的提醒\n\n1. 應同步觀察房價/租金與生活機能，不宜只用單一價格指標判斷更新效益。\n2. 若綠廊周邊價格快速上升，需搭配居住可負擔性與租屋監測。\n3. 若生活機能點位集中，適合優先檢討步行、人車分流與夜間照明。\n\n> 本段為前端本機分析，未呼叫外部 AI API。使用者提問：${prompt}`;
+}
+
 let CustomHeatLayerClass: any = null;
 
 function getCustomHeatLayerClass() {
@@ -1159,7 +1248,7 @@ export default function App() {
       const data = await res.json();
       setAiResponse(data.analysis || "無解析結果，請稍後重試。");
     } catch (err: any) {
-      setAiResponse(`### [分析錯誤]\n\n無法完成空間分析: ${err.message}`);
+      setAiResponse(buildLocalSpatialAnalysis(stats, effectiveDataMode, promptToSend, shopStats));
     } finally {
       setAiLoading(false);
     }
@@ -1395,25 +1484,14 @@ export default function App() {
                   setSimulationLoading(true);
                   setSimulationError(null);
                   try {
-                    const response = await fetch("/api/agent-simulation", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        isRent: effectiveDataMode === "rent",
-                        bufferSize: bufferDistance,
-                        avgPrice: stats.avgPrice,
-                        shopCount: shopStats.total,
-                        distanceToGreenway: 150,
-                        policyScenario: policyScenario
-                      })
+                    const agents = simulateLocalAgents({
+                      isRent: effectiveDataMode === "rent",
+                      bufferSize: bufferDistance,
+                      avgPrice: stats.avgPrice,
+                      shopCount: shopStats.total,
+                      policyScenario
                     });
-                    if (!response.ok) throw new Error("模擬請求失敗，請確認後端服務。");
-                    const data = await response.json();
-                    if (data.agents) {
-                      setSimulationResults(data.agents);
-                    } else {
-                      throw new Error("回傳資料格式有誤。");
-                    }
+                    setSimulationResults(agents);
                   } catch (err: any) {
                     setSimulationError(err.message || "未知錯誤");
                   } finally {
