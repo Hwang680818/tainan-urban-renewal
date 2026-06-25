@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import * as turf from "@turf/turf";
+import Papa from "papaparse";
 import { 
   Plus, 
   MapPin, 
@@ -65,6 +66,150 @@ interface Rental {
   lat: number;
   lng: number;
   distanceMeters: number;
+}
+
+
+// Vercel 靜態部署版：前端直接讀 public/data 裡的 CSV，不再依賴 /api 後端。
+const TAINAN_ROAD_ANCHORS = [
+  { key: "開元", district: "北區", lat: 23.0078, lng: 120.2134 },
+  { key: "前鋒", district: "東區", lat: 22.9968, lng: 120.2136 },
+  { key: "東門路一段", district: "東區", lat: 22.9898, lng: 120.2164 },
+  { key: "東門路二段", district: "東區", lat: 22.9868, lng: 120.2255 },
+  { key: "林森", district: "東區", lat: 22.9845, lng: 120.2180 },
+  { key: "府連", district: "東區", lat: 22.9859, lng: 120.2161 },
+  { key: "健康", district: "南區", lat: 22.9815, lng: 120.2162 },
+  { key: "榮譽", district: "東區", lat: 22.9778, lng: 120.2179 },
+  { key: "大同路二段", district: "東區", lat: 22.9800, lng: 120.2148 },
+  { key: "大同路三段", district: "東區", lat: 22.9620, lng: 120.2198 },
+  { key: "中華東路", district: "東區", lat: 22.9740, lng: 120.2184 },
+  { key: "生產", district: "東區", lat: 22.9712, lng: 120.2188 },
+  { key: "崇德", district: "東區", lat: 22.9730, lng: 120.2218 },
+  { key: "崇明", district: "東區", lat: 22.9758, lng: 120.2178 },
+  { key: "崇善", district: "東區", lat: 22.9698, lng: 120.2245 },
+  { key: "長榮", district: "東區", lat: 22.9878, lng: 120.2208 },
+  { key: "青年", district: "中西區", lat: 22.9926, lng: 120.2133 }
+];
+
+function hashText(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getApproxLatLng(address: string): { lat: number; lng: number } {
+  const anchor = TAINAN_ROAD_ANCHORS.find(r => address.includes(r.key)) || { lat: 22.9868, lng: 120.2188 };
+  const h = hashText(address || "tainan");
+  const latOffset = (((h % 1000) / 1000) - 0.5) * 0.006;
+  const lngOffset = ((((Math.floor(h / 1000)) % 1000) / 1000) - 0.5) * 0.006;
+  return { lat: anchor.lat + latOffset, lng: anchor.lng + lngOffset };
+}
+
+function calcDistanceToRailway(lng: number, lat: number): number {
+  const line = turf.lineString(RAILWAY_CORE_AXIS.map(([lat, lng]) => [lng, lat]));
+  const point = turf.point([lng, lat]);
+  return Math.round(turf.pointToLineDistance(point, line, { units: "kilometers" }) * 1000);
+}
+
+function toNumber(value: any): number {
+  if (value === null || value === undefined) return 0;
+  const cleaned = String(value).replace(/[,，\s]/g, "");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseRepublicDate(raw: any): { date: string; republicYm: string; year: number } {
+  const s = String(raw || "").replace(/\D/g, "");
+  const ym = s.length >= 5 ? s.slice(0, 5) : s;
+  if (ym.length >= 5) {
+    const y = Number(ym.slice(0, 3)) + 1911;
+    const m = ym.slice(3, 5);
+    return { date: `${y}/${m}`, republicYm: ym, year: y };
+  }
+  return { date: "未知", republicYm: "", year: new Date().getFullYear() };
+}
+
+function rowToProperty(row: any): Property | null {
+  const address = row["土地位置建物門牌"] || row["address"] || "";
+  if (!address || String(address).includes("land sector")) return null;
+
+  const totalPriceNtd = toNumber(row["總價元"]);
+  const areaSqm = toNumber(row["建物移轉總面積平方公尺"]);
+  let unitSqm = toNumber(row["單價元平方公尺"]);
+  if (!unitSqm && totalPriceNtd && areaSqm) unitSqm = totalPriceNtd / areaSqm;
+  if (!totalPriceNtd && !unitSqm) return null;
+
+  // 優先使用 greenway_house_geocoded.csv 裡已經整理好的 lat/lng。
+  // 如果資料沒有座標，才退回用地址做近似定位。
+  const csvLat = toNumber(row["lat"] || row["緯度"] || row["latitude"] || row["Latitude"]);
+  const csvLng = toNumber(row["lng"] || row["經度"] || row["longitude"] || row["Longitude"]);
+  const coord = csvLat && csvLng ? { lat: csvLat, lng: csvLng } : getApproxLatLng(address);
+
+  const d = parseRepublicDate(row["交易年月日"] || row["交易年月"]);
+  return {
+    district: row["鄉鎮市區"] || "東區",
+    subject: row["交易標的"] || "房地(土地+建物)",
+    address,
+    date: d.date,
+    republicYm: d.republicYm,
+    year: d.year,
+    totalPrice: Math.round(totalPriceNtd / 10000),
+    areaPing: Math.round(areaSqm * 0.3025 * 10) / 10,
+    unitPricePing: Math.round(((unitSqm * 3.3058) / 10000) * 10) / 10,
+    buildingType: row["建物型態"] || "住宅",
+    lat: coord.lat,
+    lng: coord.lng,
+    distanceMeters: calcDistanceToRailway(coord.lng, coord.lat)
+  };
+}
+
+function rowToRental(row: any): Rental | null {
+  const address = row["土地位置建物門牌"] || row["address"] || "";
+  if (!address || String(address).includes("land sector")) return null;
+  const monthlyRent = toNumber(row["總額元"] || row["每月租金"] || row["每月租金元"]);
+  const areaSqm = toNumber(row["建物總面積平方公尺"] || row["租賃面積平方公尺"] || row["建物移轉總面積平方公尺"]);
+  if (!monthlyRent) return null;
+  const areaPing = areaSqm ? Math.round(areaSqm * 0.3025 * 10) / 10 : 0;
+  const { lat, lng } = getApproxLatLng(address);
+  const d = parseRepublicDate(row["租賃年月日"] || row["交易年月日"] || row["交易年月"]);
+  return {
+    district: row["鄉鎮市區"] || "東區",
+    address,
+    date: d.date,
+    republicYm: d.republicYm,
+    year: d.year,
+    monthlyRent,
+    areaPing,
+    unitRentPing: areaPing ? Math.round(monthlyRent / areaPing) : 0,
+    buildingType: row["建物型態"] || "住宅",
+    lat,
+    lng,
+    distanceMeters: calcDistanceToRailway(lng, lat)
+  };
+}
+
+async function loadCsvRows(url: string): Promise<any[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`讀取資料失敗：${url}`);
+  const text = await res.text();
+  const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+  return (parsed.data || []) as any[];
+}
+
+function getFallbackShops(): any[] {
+  const base = [
+    { name: "台南車站商圈", category: "百貨商場", address: "台南市東區前鋒路", lat: 22.9972, lng: 120.2126 },
+    { name: "7-ELEVEN 東門門市", category: "便利商店", address: "台南市東區東門路一段", lat: 22.9890, lng: 120.2175 },
+    { name: "全家便利商店 林森店", category: "便利商店", address: "台南市東區林森路", lat: 22.9845, lng: 120.2180 },
+    { name: "崇德路餐飲帶", category: "餐廳", address: "台南市東區崇德路", lat: 22.9730, lng: 120.2218 },
+    { name: "東門咖啡生活圈", category: "咖啡廳", address: "台南市東區東門路二段", lat: 22.9868, lng: 120.2255 },
+    { name: "中華東路超市生活圈", category: "超市", address: "台南市東區中華東路", lat: 22.9740, lng: 120.2184 },
+    { name: "生產路銀行生活圈", category: "銀行", address: "台南市東區生產路", lat: 22.9712, lng: 120.2188 },
+    { name: "大同路藥局生活圈", category: "藥局", address: "台南市東區大同路二段", lat: 22.9800, lng: 120.2148 }
+  ];
+  return base.map(s => ({ ...s, distanceMeters: calcDistanceToRailway(s.lng, s.lat) }));
 }
 
 let CustomHeatLayerClass: any = null;
@@ -426,30 +571,25 @@ export default function App() {
     };
   }, [filteredShops]);
 
-  // Fetch properties and rentals from backend
+    // Vercel 靜態部署版：直接從 public/data 讀取 CSV
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [propRes, rentRes, shopRes] = await Promise.all([
-        fetch("/api/properties"),
-        fetch("/api/rentals"),
-        fetch("/api/shops")
+      const [propertyRows, rentalRows] = await Promise.all([
+        loadCsvRows("/data/greenway_house_geocoded.csv"),
+        loadCsvRows("/data/台南鐵路地下化沿線租金.csv")
       ]);
-      
-      if (!propRes.ok) throw new Error("買賣資料獲取失敗，請確認伺服器狀態");
-      if (!rentRes.ok) throw new Error("租賃資料獲取失敗，請確認伺服器狀態");
-      if (!shopRes.ok) throw new Error("生活機能設施獲取失敗");
-      
-      const propData: Property[] = await propRes.json();
-      const rentData: Rental[] = await rentRes.json();
-      const shopData: any[] = await shopRes.json();
-      
+
+      const propData = propertyRows.map(rowToProperty).filter(Boolean) as Property[];
+      const rentData = rentalRows.map(rowToRental).filter(Boolean) as Rental[];
+      const shopData = getFallbackShops();
+
       setProperties(propData);
       setRentals(rentData);
       setShops(shopData);
       setError(null);
     } catch (err: any) {
-      setError(err.message || "載入失敗");
+      setError(err.message || "載入失敗，請確認 public/data 內是否有房價與租金 CSV");
     } finally {
       setLoading(false);
     }
