@@ -1,0 +1,8 @@
+{
+  "name": "Remix: 智慧城市:台南鐵路地下化沿線房價趨勢",
+  "description": "台南鐵路地下化東門路廊帶影響範圍（台南車站、東門路、崇德路、生產路、仁德）之房價熱力地圖與都市計畫分析系統，提供實價登錄篩選、距離帶衰減分析與 AI 趨勢洞察。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

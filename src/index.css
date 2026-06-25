@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Noto Serif TC", "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-linen-50: #fcfbf7;
+  --color-linen-100: #faf7f0;
+  --color-linen-200: #efead8;
+  --color-linen-300: #dfd8bc;
+  --color-clay-50: #fef8f5;
+  --color-clay-100: #fbf0ea;
+  --color-clay-600: #c35a3e;
+  --color-clay-700: #9e462e;
+  --color-olive-600: #5d614e;
+  --color-olive-700: #4a4d3e;
+  --color-earth-900: #2b2a25;
+}
+
+body {
+  background-color: var(--color-linen-50);
+  color: var(--color-earth-900);
+}
+
+/* 經典美學地圖 Popup 字體與樣式微調 */
+.leaflet-popup-content-wrapper {
+  background-color: #faf7f0 !important;
+  color: #2b2a25 !important;
+  font-family: "Noto Serif TC", serif !important;
+  border-radius: 8px !important;
+  border: 1px solid #dfd8bc !important;
+  box-shadow: 0 4px 18px rgba(43, 42, 37, 0.12) !important;
+}
+
+.leaflet-popup-tip {
+  background-color: #faf7f0 !important;
+  border: 1px solid #dfd8bc !important;
+}
+
+/* 經典美學地下化新站點標註樣式 */
+@keyframes station-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 0.9;
+    box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+@keyframes tainan-station-pulse {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(158, 70, 46, 0.9), 0 0 4px rgba(158, 70, 46, 0.5);
+  }
+  70% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 14px rgba(158, 70, 46, 0), 0 0 10px rgba(158, 70, 46, 0.2);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(158, 70, 46, 0.9), 0 0 4px rgba(158, 70, 46, 0.5);
+  }
+}
+
+.custom-station-pulse {
+  background-color: #e11d48;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  animation: station-pulse 2s infinite;
+}
+
+.custom-tainan-station-pulse {
+  background-color: #9e462e;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  animation: tainan-station-pulse 1.8s infinite;
+}
+
+.custom-station-label {
+  font-family: "Noto Serif TC", serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: #2b2a25;
+  background-color: rgba(250, 247, 240, 0.9);
+  border: 1px solid #dfd8bc;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.custom-tainan-station-label {
+  font-family: "Noto Serif TC", serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffffff;
+  background-color: #9e462e;
+  border: 1px solid #833924;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(158, 70, 46, 0.35);
+}
+
+
